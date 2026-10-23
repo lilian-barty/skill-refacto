@@ -1,6 +1,6 @@
 ---
 name: refacto
-description: "Refactorisation prouvée de tout ce qui contient du code : pages HTML, mini-applis, sites statiques, démos, scripts Node ou Python, nœuds Code n8n. Rend le code plus simple à lire et à modifier SANS rien changer pour l'utilisateur, et le prouve par mesure : empreinte avant/après (DOM, styles calculés de chaque élément, arbre d'accessibilité, focus, pixels) à 375 et 1440 px, en thème clair et sombre, état par état ; ou sorties identiques à l'octet pour un script. Ouverture automatique des menus et onglets, rapport visuel avant/après, poids et vitesse de chargement. Inventaire outillé du code mort et des doublons, rangement par lots vérifiés un à un, nettoyage, rapport. Les bugs et les choix douteux trouvés en route sont soumis à l'utilisateur, jamais corrigés en silence. Trigger : /refacto [fichier, dossier ou projet], ou « refactorise », « nettoie le code », « simplifie le code de cette page », « range ce script »."
+description: "Refactorisation prouvée de tout ce qui contient du code : pages HTML, applis, sites statiques, scripts Node ou Python, nœuds Code n8n. Rend le code plus simple à lire et à modifier SANS rien changer pour l'utilisateur, et le prouve par mesure : empreinte avant/après (DOM, styles calculés de chaque élément, arbre d'accessibilité, focus, pixels) à 375 et 1440 px, en thème clair et sombre, état par état ; ou sorties identiques à l'octet. Ouverture automatique des menus et onglets, rapport visuel avant/après, poids et vitesse. Inventaire du code mort et des doublons, rangement par lots vérifiés. Deux modes courts : léger (fichiers d'une modification récente, sans empreinte) et consignes (skills, CLAUDE.md, réglages : doublons, contradictions, chemins morts). Les bugs et les choix douteux trouvés en route sont soumis à l'utilisateur, jamais corrigés en silence. Trigger : /refacto [fichier, dossier ou projet], ou « refactorise », « nettoie le code », « simplifie le code de cette page », « range ce script »."
 ---
 
 # Refactorisation prouvée
@@ -15,6 +15,38 @@ Quand ce skill est invoqué, afficher d'abord ce court mode d'emploi, puis encha
 > - Je range seul ce qui ne change rien pour l'utilisateur. Un bug trouvé en route, ou un choix qui ressemble à une décision, vous est soumis : je n'y touche pas
 > - À la fin, un rapport visuel montre les captures avant et après, les écarts entourés, et le poids de la page
 > - Rien n'est commité, poussé ni mis en ligne sans votre accord
+> - Il existe deux modes courts : `/refacto léger [fichiers]` après une modification, `/refacto consignes [fichier]` pour un skill, un CLAUDE.md ou un réglage
+
+## Trois intensités
+
+| Intensité | Quand | Ce qu'elle coûte |
+|---|---|---|
+| **Complet** (par défaut) | Une page, une appli ou un script à ranger, une page publiée ou livrée, plus de 300 lignes ou 3 fichiers de code touchés | Le déroulé entier ci-dessous, empreinte comprise |
+| **Léger** (`/refacto léger`) | Juste après une modification plus petite : vérifier qu'elle ne laisse rien derrière elle | Quelques appels d'outil, sans empreinte |
+| **Consignes** (`/refacto consignes`) | Skill, CLAUDE.md, notes de passation, `settings.json`, hook | Quelques recherches et une validation |
+
+Une retouche de quelques lignes (coquille, lien) ne demande aucun des trois.
+
+### Léger
+
+Le périmètre se limite aux fichiers que la modification a créés ou changés. La dette trouvée ailleurs ne se range pas en passant : elle prend une ligne au bilan, avec la proposition d'un `/refacto` complet si elle en vaut la peine.
+1. `verifier-syntaxe.mjs` sur le dossier des fichiers touchés.
+2. `code-mort.mjs` sur ce même dossier. Ne retenir que les suspects qui concernent les fichiers touchés, et confirmer chacun par une recherche dans le projet (pièges plus bas : images chargées par concaténation, classes fabriquées, modificateurs en `--`) avant de supprimer.
+3. Relire le diff de la modification : code devenu mort par la modification elle-même, propriétés devenues inertes (taille de police sur un élément sans texte, animation sans images-clés), doublons créés, échafaudages (scripts jetables, `console.log`, fichiers temporaires), commentaires et documentation qui décrivent l'état d'avant.
+4. Ranger seulement ce qui ne change rien à l'écran. Une correction ou une décision se signale, comme à l'étape 2 du déroulé complet.
+5. Vérifier de nouveau la syntaxe, lancer les tests du projet s'il en a et, pour une page, la contrôler à 375 px.
+
+### Consignes
+
+Ce qui est chargé à chaque message (CLAUDE.md, index de mémoire, description d'un skill) se paie à chaque message : chaque ligne doit mériter sa place.
+1. **Une règle, une copie.** Chercher les mots-clés de la règle dans les autres fichiers d'instructions (CLAUDE.md global et du projet, skills voisins, notes de passation). Si un doublon apparaît, garder la copie au bon endroit et remplacer les autres par un renvoi d'une ligne.
+2. **Pas de contradiction.** Une règle plus ancienne qui dit l'inverse se met à jour ou se supprime, et la date de la décision s'écrit.
+3. **Pas de chemin mort.** Chaque fichier, dossier, skill ou script cité existe, sous le nom écrit.
+4. **Le détail descend.** Ce qui ne sert pas à chaque message va dans le SKILL.md ou un fichier de référence ; le fichier chargé n'en garde que le titre et le renvoi.
+5. **Validation.** Skill : le frontmatter se lit, la description tient en 1 024 caractères (validateur `quick_validate.py` du skill `skill-creator` d'Anthropic, s'il est installé ; `claude plugin validate` pour un plugin). `settings.json` : `node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" <fichier>`. Hook : le script cité existe et s'exécute sans erreur sur une entrée d'essai.
+6. **Bilan chiffré.** Donner le nombre de lignes du fichier chargé avant et après.
+
+Le reste de ce document décrit l'intensité complète.
 
 ## La règle d'or
 
@@ -35,7 +67,7 @@ Cinq scripts dans le dossier `scripts/` de ce skill. Il faut Node 18 ou plus, et
 | `code-mort.mjs` | Inventaire des suspects : classes et identifiants jamais posés, variables CSS et @keyframes inutilisées, déclarations CSS en double, fonctions jamais appelées, fichiers orphelins | `node code-mort.mjs <dossier> --exclure <fichier généré>` |
 | `empreinte.mjs` | Preuve pour une page ou une appli : DOM, style calculé de chaque élément et de ses pseudo-éléments, arbre d'accessibilité, focus, débordement horizontal, pixels, dans chaque état, à 375 et 1440 px, en clair et en sombre. Relève aussi le poids et la vitesse de chargement, et écrit un rapport visuel | `node empreinte.mjs <page> <ref.json> --etats etats.mjs --explorer` |
 | `sorties.mjs` | Preuve pour un script : code de sortie, texte affiché (dates et durées masquées), fichiers produits à l'octet près | `node sorties.mjs <ref.json> --commande "node build.mjs" --produit dist` |
-| `auto-test.mjs` | Vérifie que les quatre outils voient ce qu'ils doivent voir, et rien quand il n'y a rien (49 contrôles sur un site de test) | `node auto-test.mjs` |
+| `auto-test.mjs` | Vérifie que les quatre outils voient ce qu'ils doivent voir, et rien quand il n'y a rien (78 contrôles sur un site de test, en français et en anglais) | `node auto-test.mjs` |
 
 `empreinte.mjs` et `sorties.mjs` fonctionnent de la même façon : si la référence n'existe pas, elle est créée ; si elle existe, elle sert de comparaison. Code de sortie 0 si tout est identique, 1 sinon, et chaque écart est montré en clair (élément, propriété, avant, après, nombre de pixels et zone touchée).
 
@@ -164,6 +196,10 @@ Le piège le plus coûteux : **chaque page existe alors en deux exemplaires**, l
 - **Raccourci `border` vide** : le navigateur le rend vide dès que les quatre côtés diffèrent, et un changement de bordure échappait à `--sans-captures`. Les bordures sont relevées côté par côté, avec `pointer-events` (un bouton qui ne reçoit plus le clic ne se voit ni à l'écran ni dans le DOM) et une vingtaine d'autres propriétés.
 - **Fichier resté d'une exécution précédente** : `sorties.mjs` prenait pour produit un fichier que la commande n'écrivait plus. Il relève maintenant la date de chaque fichier avant de lancer la commande. Un script de construction qui saute les fichiers inchangés déclenche cet écart à tort : vider le dossier produit avant l'enregistrement et avant la comparaison.
 - **Première règle après un `@import`** (ou un `@charset`, un `@layer a, b;`) : `code-mort.mjs` l'avalait avec l'instruction. Corrigé, et les règles CSS imbriquées sont lues.
+- **Python sous Windows réécrit les fins de ligne en silence** : `open(f).read()` puis `open(f, 'w').write()` en mode texte transforme un fichier LF en CRLF. Sur un projet réel, une simple retouche par script a fait apparaître deux fichiers entiers comme modifiés dans le diff suivant. Pour retoucher par script, lire et écrire en binaire, ou passer `newline=''`. Pour compter les retours chariot, lire les octets (`python -c`) : selon le shell, `grep -c $'\r'` compte toutes les lignes.
+- **Classe à modificateur en `--`** (`bouton--contour`) : `code-mort.mjs` la lit comme une variable CSS et annonce une variable `--contour` « déclarée, jamais lue » qui n'existe pas. Chercher `--contour:` avant de vouloir la supprimer.
+- **L'empreinte ne voit pas les animations** : elle mesure la page avec les animations figées. Une page dont les animations sont pilotées par le défilement (`animation-timeline`) demande une preuve à part, faite avec les animations actives : pour chaque élément animé, relever la cascade (nom, repère, plage, durée) et les valeurs calculées (`translate`, `filter`, opacité…) à plusieurs positions de défilement, avant et après.
+- **Référence enregistrée dans un état instable** : sur un site réel, une page avait été mesurée une fois avec des largeurs de texte décalées d'une fraction de pixel, d'où 10 faux écarts. Pour trancher, mesurer la copie de sauvegarde intacte contre la même référence : si elle montre les mêmes écarts, réenregistrer la référence depuis cette copie. Ne jamais lancer la double mesure à vide en arrière-plan pendant qu'on modifie déjà les fichiers.
 - **Décisions actées déguisées en dette** : du CSS écrit dans chaque page plutôt que dans une feuille commune, un petit script en tête de page qui semble faire doublon. Chercher la raison dans la documentation du projet avant de « corriger » ce qui ressemble à une duplication.
 - **PowerShell sous Windows** écrit par défaut en UTF-16 et casse les accents : écrire les fichiers avec les outils d'édition, pas avec le shell.
 

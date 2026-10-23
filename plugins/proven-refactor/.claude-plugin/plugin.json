@@ -1,0 +1,14 @@
+{
+  "name": "proven-refactor",
+  "displayName": "Proven refactor (English)",
+  "version": "1.4.0",
+  "description": "Refactor with Claude without breaking anything: a fingerprint of the page before and after each change, compared down to the pixel, on phone and desktop, in light and dark.",
+  "author": {
+    "name": "Lilian Barty-Christophe",
+    "url": "https://www.lilian-barty.fr/"
+  },
+  "homepage": "https://github.com/lilian-barty/skill-refacto",
+  "repository": "https://github.com/lilian-barty/skill-refacto",
+  "license": "MIT",
+  "keywords": ["refactoring", "html", "css", "javascript", "visual-regression", "accessibility", "claude-code", "skill"]
+}

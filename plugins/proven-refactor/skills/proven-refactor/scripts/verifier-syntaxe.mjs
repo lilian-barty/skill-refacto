@@ -3,15 +3,20 @@
 // JSON-LD et les fichiers .json / .webmanifest (JSON valide), les .py (compilation sans exécution).
 // Né d'une panne réelle : une apostrophe non protégée dans un texte cassait toute une appli, sans aucun message visible.
 //
-// Usage : node verifier-syntaxe.mjs <fichier ou dossier> [autres...]
+// Usage : node verifier-syntaxe.mjs <fichier ou dossier> [autres...] [--lang en]
+//   --lang en : l'outil parle anglais (défaut : français, ou la variable REFACTO_LANG)
 // Sortie : une ligne par problème, puis un bilan. Code de sortie 1 s'il y a au moins un problème.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const cibles = process.argv.slice(2);
-if (!cibles.length) { console.log("Usage : node verifier-syntaxe.mjs <fichier ou dossier> [...]"); process.exit(2); }
+const args = process.argv.slice(2);
+const iLang = args.indexOf("--lang");
+const EN = /^en/i.test((iLang >= 0 ? args[iLang + 1] : process.env.REFACTO_LANG) || "");
+const t = (fr, en) => (EN ? en : fr);
+const cibles = args.filter((a, i) => a !== "--lang" && args[i - 1] !== "--lang");
+if (!cibles.length) { console.log(t("Usage : node verifier-syntaxe.mjs <fichier ou dossier> [...]", "Usage: node verifier-syntaxe.mjs <file or folder> [...] [--lang en]")); process.exit(2); }
 
 const IGNORES = new Set(["node_modules", ".git", ".vercel", ".next", "dist-cache", "__pycache__"]);
 const fichiers = [];
@@ -20,7 +25,7 @@ function parcourir(p) {
   if (s.isDirectory()) { for (const n of fs.readdirSync(p)) if (!IGNORES.has(n)) parcourir(path.join(p, n)); }
   else fichiers.push(p);
 }
-for (const c of cibles) { if (!fs.existsSync(c)) { console.log("Introuvable : " + c); process.exit(2); } parcourir(path.resolve(c)); }
+for (const c of cibles) { if (!fs.existsSync(c)) { console.log(t("Introuvable : ", "Not found: ") + c); process.exit(2); } parcourir(path.resolve(c)); }
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "verif-syntaxe-"));
 const problemes = [];
@@ -38,12 +43,12 @@ function checkNode(fichier, libelle) {
   // Message utile seulement : emplacement, ligne fautive, flèche, nature de l'erreur (sans la pile interne de Node)
   const lignes = (r.stderr || "").split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("Node.js") && !/^\s+at /.test(l));
   const estTemp = fichier.startsWith(temp);
-  const message = lignes.map((l) => (estTemp && l.startsWith(fichier) ? "ligne " + l.slice(fichier.length + 1) + " de la page" : l));
+  const message = lignes.map((l) => (estTemp && l.startsWith(fichier) ? t("ligne " + l.slice(fichier.length + 1) + " de la page", "line " + l.slice(fichier.length + 1) + " of the page") : l));
   problemes.push(`${libelle}\n   ${message.slice(0, 4).join("\n   ")}`);
 }
 function checkJson(texte, libelle) {
   verifies++;
-  try { JSON.parse(texte); } catch (e) { problemes.push(`${libelle}\n   JSON invalide : ${e.message}`); }
+  try { JSON.parse(texte); } catch (e) { problemes.push(`${libelle}\n   ${t("JSON invalide : ", "invalid JSON: ")}${e.message}`); }
 }
 const ligneDe = (texte, index) => texte.slice(0, index).split("\n").length;
 
@@ -58,7 +63,7 @@ for (const f of fichiers) {
     // « python » sous Windows, « python3 » ailleurs : le premier qui répond sert pour tous les fichiers
     python ??= ["python", "python3"].find((c) => spawnSync(c, ["--version"]).status === 0) || "";
     const r = python ? spawnSync(python, ["-c", "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1])", f], { encoding: "utf8" }) : { error: true };
-    if (r.error) problemes.push(`${f}\n   Python introuvable, fichier non vérifié`);
+    if (r.error) problemes.push(`${f}\n   ${t("Python introuvable, fichier non vérifié", "Python not found, file not checked")}`);
     else if (r.status !== 0) problemes.push(`${f}\n   ${(r.stderr || "").trim().split(/\r?\n/).slice(-3).join("\n   ")}`);
   } else if (ext === ".html" || ext === ".htm") {
     const html = fs.readFileSync(f, "utf8");
@@ -69,7 +74,7 @@ for (const f of fichiers) {
       if (/\bsrc\s*=/.test(attrs) || !code.trim()) continue;
       n++;
       const type = (attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i) || [])[1]?.toLowerCase() || "";
-      const libelle = `${f}, script n°${n} (ligne ${ligneDe(html, m.index)})`;
+      const libelle = t(`${f}, script n°${n} (ligne ${ligneDe(html, m.index)})`, `${f}, script #${n} (line ${ligneDe(html, m.index)})`);
       if (type.includes("json") || type === "importmap" || type === "speculationrules") { checkJson(code, libelle); continue; }
       if (type && !["module", "text/javascript", "application/javascript"].includes(type)) continue; // gabarits, shaders...
       const tmp = path.join(temp, `script-${verifies}${type === "module" ? ".mjs" : ".cjs"}`);
@@ -81,7 +86,10 @@ for (const f of fichiers) {
 }
 fs.rmSync(temp, { recursive: true, force: true });
 
-for (const p of problemes) console.log("PROBLÈME " + p);
-console.log(`${verifies} bloc(s) de code vérifié(s) dans ${lus} fichier(s) : ${problemes.length ? problemes.length + " problème(s)" : "aucune erreur de syntaxe"}`);
-if (nonLus.size) console.log(`NON VÉRIFIÉS : ${[...nonLus.values()].reduce((a, b) => a + b, 0)} fichier(s) ${[...nonLus.keys()].sort().join(", ")}, que cet outil ne lit pas. Les faire contrôler par l'outil du projet (tsc, construction, linter).`);
+for (const p of problemes) console.log(t("PROBLÈME ", "PROBLEM ") + p);
+console.log(t(`${verifies} bloc(s) de code vérifié(s) dans ${lus} fichier(s) : ${problemes.length ? problemes.length + " problème(s)" : "aucune erreur de syntaxe"}`,
+  `${verifies} code block(s) checked in ${lus} file(s): ${problemes.length ? problemes.length + " problem(s)" : "no syntax errors"}`));
+const nNonLus = [...nonLus.values()].reduce((a, b) => a + b, 0), extNonLues = [...nonLus.keys()].sort().join(", ");
+if (nonLus.size) console.log(t(`NON VÉRIFIÉS : ${nNonLus} fichier(s) ${extNonLues}, que cet outil ne lit pas. Les faire contrôler par l'outil du projet (tsc, construction, linter).`,
+  `NOT CHECKED: ${nNonLus} file(s) ${extNonLues}, which this tool does not read. Have them checked by the project's own tool (tsc, build, linter).`));
 process.exitCode = problemes.length ? 1 : 0;

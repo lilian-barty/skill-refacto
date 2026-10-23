@@ -7,6 +7,8 @@
 // aux états à plusieurs étapes (formulaire rempli puis envoyé, parcours complet, préparation avant chargement).
 // Avant chaque capture, la souris est ramenée dans le coin supérieur gauche : un clic du scénario (page.click) ne
 // laisse pas de survol sur l'écran suivant. Pour capturer un survol voulu : capturer(nom, { garderSouris: true }).
+// theme vaut « clair » ou « sombre » (« light » ou « dark » quand l'outil tourne en anglais, avec --lang en).
+// Version anglaise de ce modèle, avec les noms anglais des outils : example-states.mjs.
 
 // Facultatif : exécuté avant le chargement de la page (clés de stockage, écran d'ouverture à sauter...)
 export async function preparer(page) {

@@ -18,7 +18,7 @@ Chaque ligne se lit ainsi : ce qu'on repère, ce qu'on en fait, et le piège. La
 
 | Ce qu'on repère | Ce qu'on en fait | Famille | Piège |
 |---|---|---|---|
-| Classe, identifiant, variable ou `@keyframes` que `code-mort.mjs` signale | Confirmer par recherche du nom ET de son préfixe dans tout le projet, puis supprimer | Rangement | Noms fabriqués en JavaScript (`'etat-' + x`) ; autres pages du site qui partagent la feuille |
+| Classe, identifiant, variable ou `@keyframes` que `code-mort.mjs` signale | Confirmer par recherche du nom ET de son préfixe dans tout le projet, puis supprimer | Rangement | Noms fabriqués en JavaScript (`'etat-' + x`) ; autres pages du site qui partagent la feuille ; classes à modificateur en `--` lues comme des variables |
 | Même valeur (couleur, taille, espacement, durée) répétée | Une variable, et une échelle : quelques tailles de texte, quelques espacements, trois durées d'animation | Rangement | Une couleur passée en variable doit avoir sa valeur sombre ; une couleur codée en dur qui casse le thème sombre relève de la correction |
 | Mêmes déclarations sous plusieurs sélecteurs | Regrouper les sélecteurs, ou une classe commune | Rangement | Faux jumeaux : même nom, valeurs différentes. Ne regrouper que le strictement identique |
 | Sélecteur déclaré deux fois dans le même fichier | Fusionner à la place de la seconde déclaration | Rangement | L'ordre compte : fusionner à l'endroit de la DERNIÈRE occurrence, sinon une règle intermédiaire peut gagner |
@@ -51,6 +51,7 @@ Chaque ligne se lit ainsi : ce qu'on repère, ce qu'on en fait, et le piège. La
 | Script qui écrit même quand une étape a échoué | À lister | Correction | Refuser d'écrire une page dont un script est cassé change le comportement : correction validée d'abord |
 | Scripts PowerPoint (python-pptx) | Garder le source en ASCII, réécrire en bloc | Rangement | La typographie Unicode fait échouer les remplacements partiels ; et ne jamais regénérer un .pptx retouché à la main, les retouches seraient perdues |
 | Fichier écrit par PowerShell | Réécrire avec Write ou Edit | Rangement | PowerShell 5.1 écrit en UTF-16 : accents cassés |
+| Fichier réécrit par Python en mode texte sous Windows | Lire et écrire en binaire, ou `newline=''` | Rangement | LF devient CRLF en silence, et tout le fichier apparaît modifié |
 
 ## Nœuds Code n8n
 

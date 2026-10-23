@@ -1,5 +1,20 @@
 # Versions
 
+## 1.4.0, le 23 octobre 2026
+
+Version anglaise et deux modes courts.
+
+- Le dépôt porte deux plugins : `refacto` (français) et `proven-refactor` (anglais). Ils suivent la même méthode et embarquent les mêmes scripts. Le README d'accueil est en anglais, la version française est dans `README.fr.md`.
+- Les scripts parlent les deux langues : `--lang en` ou `REFACTO_LANG=en` passe les messages, les bilans et le rapport visuel en anglais. Chaque option a un nom anglais (`--states`, `--explore`, `--bypass-csp`…), les noms français restent valides. Le scénario d'états accepte les noms anglais (`prepare`, `capture`, `click`…), avec un modèle `example-states.mjs`.
+- Une référence enregistrée dans une langue se compare dans l'autre sans écart.
+- Deux modes courts, sans empreinte : `léger`, limité aux fichiers d'une modification récente, et `consignes`, pour les skills, CLAUDE.md, réglages et hooks (doublons, contradictions, chemins morts, longueur).
+- Quatre pièges ajoutés : Python qui réécrit les fins de ligne sous Windows, classes à modificateur en `--` lues comme des variables, animations pilotées par le défilement, référence enregistrée dans un état instable.
+- `sorties.mjs` : une durée écrite en toutes lettres (« 3 seconds ») est masquée comme les autres ; le bilan ne cite plus l'écran quand `--ecran-libre` est actif.
+- Auto-test : 78 contrôles, dans les deux langues.
+- Installation : les chemins changent (`plugins/refacto/skills/refacto`). Après une version antérieure, lancer `/plugin marketplace update lilian-barty-refacto`.
+
+**English.** The repository now ships two plugins, `refacto` (French) and `proven-refactor` (English), with the same method and the same scripts. The scripts speak both languages (`--lang en` or `REFACTO_LANG=en`), every option has an English name, and references compare across languages. Two short modes were added (light, instructions), along with four new pitfalls. Self-test: 78 checks, in both languages.
+
 ## 1.3.1, le 1er octobre 2026
 
 Ajout d'une règle anti-AI slop dans le skill : pas de remplissage, pas de chiffres inventés, pas de commentaires qui paraphrasent le code, relecture de la sortie avant de rendre.

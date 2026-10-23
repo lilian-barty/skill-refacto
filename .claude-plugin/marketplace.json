@@ -4,14 +4,30 @@
     "name": "Lilian Barty-Christophe",
     "url": "https://www.lilian-barty.fr/"
   },
-  "description": "Le skill refacto de Lilian Barty-Christophe.",
+  "description": "Proven refactoring for Claude Code, in French (refacto) and English (proven-refactor).",
   "plugins": [
     {
       "name": "refacto",
-      "displayName": "Skill refacto",
-      "source": "./",
+      "displayName": "Skill refacto (français)",
+      "source": "./plugins/refacto",
       "description": "Refactoriser avec Claude sans rien casser : une empreinte de la page avant et après chaque changement, comparée au pixel près, sur téléphone et ordinateur, en clair et en sombre.",
-      "version": "1.3.0",
+      "version": "1.4.0",
+      "author": {
+        "name": "Lilian Barty-Christophe",
+        "url": "https://www.lilian-barty.fr/"
+      },
+      "homepage": "https://github.com/lilian-barty/skill-refacto/blob/main/README.fr.md",
+      "repository": "https://github.com/lilian-barty/skill-refacto",
+      "license": "MIT",
+      "category": "development",
+      "keywords": ["refactoring", "refactorisation", "html", "css", "javascript", "visual-regression", "francais"]
+    },
+    {
+      "name": "proven-refactor",
+      "displayName": "Proven refactor (English)",
+      "source": "./plugins/proven-refactor",
+      "description": "Refactor with Claude without breaking anything: a fingerprint of the page before and after each change, compared down to the pixel, on phone and desktop, in light and dark.",
+      "version": "1.4.0",
       "author": {
         "name": "Lilian Barty-Christophe",
         "url": "https://www.lilian-barty.fr/"
@@ -20,7 +36,7 @@
       "repository": "https://github.com/lilian-barty/skill-refacto",
       "license": "MIT",
       "category": "development",
-      "keywords": ["refactoring", "refactorisation", "html", "css", "javascript", "visual-regression"]
+      "keywords": ["refactoring", "html", "css", "javascript", "visual-regression", "accessibility"]
     }
   ]
 }

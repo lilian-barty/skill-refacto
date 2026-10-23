@@ -12,13 +12,18 @@
 //
 // Usage : node code-mort.mjs <dossier ou fichiers...> [--exclure morceau-de-chemin]... [--pas-de-fichiers]
 //   --exclure : écarte les fichiers GÉNÉRÉS (page assemblée, dossier de sortie), sinon tout y apparaît en double
+//   --lang en : l'outil parle anglais (défaut : français, ou la variable REFACTO_LANG). Noms anglais des options :
+//               --exclude, --no-files
 import fs from "node:fs";
 import path from "node:path";
 
 const args = process.argv.slice(2);
-const exclus = args.flatMap((a, i) => (a === "--exclure" ? [args[i + 1]] : []));
-const cibles = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--exclure");
-if (!cibles.length) { console.log("Usage : node code-mort.mjs <dossier ou fichiers...> [--exclure morceau-de-chemin]... [--pas-de-fichiers]"); process.exit(2); }
+const iLang = args.indexOf("--lang");
+const EN = /^en/i.test((iLang >= 0 ? args[iLang + 1] : process.env.REFACTO_LANG) || "");
+const t = (fr, en) => (EN ? en : fr);
+const exclus = args.flatMap((a, i) => (a === "--exclure" || a === "--exclude" ? [args[i + 1]] : []));
+const cibles = args.filter((a, i) => !a.startsWith("--") && !["--exclure", "--exclude", "--lang"].includes(args[i - 1]));
+if (!cibles.length) { console.log(t("Usage : node code-mort.mjs <dossier ou fichiers...> [--exclure morceau-de-chemin]... [--pas-de-fichiers]", "Usage: node code-mort.mjs <folder or files...> [--exclude path-part]... [--no-files] [--lang en]")); process.exit(2); }
 
 const IGNORES = new Set(["node_modules", ".git", ".vercel", ".next", "__pycache__"]);
 // Les fichiers TypeScript, JSX et de composants comptent comme « code qui utilise » : sans eux, toutes les classes d'une
@@ -41,16 +46,16 @@ let css = [];
 let usages = "";
 let js = [];
 for (const f of tous.filter((f) => TEXTE.has(ext(f)))) {
-  const t = lire(f);
-  if (ext(f) === ".css") css.push({ f, t });
+  const contenu = lire(f);
+  if (ext(f) === ".css") css.push({ f, t: contenu });
   else if (ext(f) === ".html" || ext(f) === ".htm") {
     let i = 0;
-    const sansStyle = t.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (m, bloc) => { css.push({ f: `${f} <style> n°${++i}`, t: bloc }); return ""; });
+    const sansStyle = contenu.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (m, bloc) => { css.push({ f: `${f} <style> ${t("n°", "#")}${++i}`, t: bloc }); return ""; });
     usages += "\n" + sansStyle;
     sansStyle.replace(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi, (m, code) => { js.push({ f, t: code }); return ""; });
   } else {
-    usages += "\n" + t;
-    if (SCRIPTS.includes(ext(f))) js.push({ f, t });
+    usages += "\n" + contenu;
+    if (SCRIPTS.includes(ext(f))) js.push({ f, t: contenu });
   }
 }
 const cssTout = css.map((c) => c.t).join("\n");
@@ -116,26 +121,26 @@ for (const r of regles) {
   for (const m of sel.matchAll(/#(-?[_a-zA-Z][\w-]*)/g)) if (!ids.has(m[1])) ids.set(m[1], r.f);
 }
 const mortes = [], douteuses = [];
-for (const [c, f] of classes) if (!present(c, usages)) { const p = peutEtreConstruit(c); (p ? douteuses : mortes).push(p ? `.${c} (le code fabrique des noms en « ${p} » : à vérifier)` : `.${c}  (${path.basename(f)})`); }
+for (const [c, f] of classes) if (!present(c, usages)) { const p = peutEtreConstruit(c); (p ? douteuses : mortes).push(p ? t(`.${c} (le code fabrique des noms en « ${p} » : à vérifier)`, `.${c} (the code builds names starting with "${p}": to check)`) : `.${c}  (${path.basename(f)})`); }
 for (const [i, f] of ids) if (!present(i, usages)) mortes.push(`#${i}  (${path.basename(f)})`);
-section("Classes et identifiants stylés mais jamais posés", mortes);
-section("Classes peut-être fabriquées par le script", douteuses);
+section(t("Classes et identifiants stylés mais jamais posés", "Classes and IDs styled but never used"), mortes);
+section(t("Classes peut-être fabriquées par le script", "Classes the script may build"), douteuses);
 
 // 2. Variables CSS
 const declarees = new Set([...(cssTout + usages).matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
 const setProp = new Set([...usages.matchAll(/setProperty\(\s*["'`](--[\w-]+)/g)].map((m) => m[1]));
 const lues = new Set([...(cssTout + usages).matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
 const sansRepli = new Set([...(cssTout + usages).matchAll(/var\(\s*(--[\w-]+)\s*\)/g)].map((m) => m[1]));
-section("Variables CSS déclarées, jamais lues", [...declarees].filter((v) => !lues.has(v) && !new RegExp(`["'\`]${echapper(v)}["'\`]`).test(usages)));
-section("Variables CSS lues sans être déclarées ni avoir de valeur de repli", [...sansRepli].filter((v) => !declarees.has(v) && !setProp.has(v)));
+section(t("Variables CSS déclarées, jamais lues", "CSS variables declared, never read"), [...declarees].filter((v) => !lues.has(v) && !new RegExp(`["'\`]${echapper(v)}["'\`]`).test(usages)));
+section(t("Variables CSS lues sans être déclarées ni avoir de valeur de repli", "CSS variables read without being declared or having a fallback value"), [...sansRepli].filter((v) => !declarees.has(v) && !setProp.has(v)));
 
 // 3. Animations
 const nomsAnimes = new Set();
 for (const m of (cssTout + usages).matchAll(/animation(?:-name)?\s*:\s*([^;}"'`]+)/g)) for (const mot of m[1].split(/[\s,]+/)) nomsAnimes.add(mot);
 for (const m of usages.matchAll(/animationName\s*=\s*["'`]([\w-]+)/g)) nomsAnimes.add(m[1]);
-section("@keyframes jamais utilisées", [...keyframes].filter((k) => !nomsAnimes.has(k) && !present(k, usages)));
+section(t("@keyframes jamais utilisées", "@keyframes never used"), [...keyframes].filter((k) => !nomsAnimes.has(k) && !present(k, usages)));
 const motsCss = new Set(["none", "infinite", "linear", "ease", "ease-in", "ease-out", "ease-in-out", "both", "forwards", "backwards", "alternate", "alternate-reverse", "reverse", "normal", "running", "paused", "step-start", "step-end", "initial", "inherit", "unset", "revert"]);
-section("Animations qui appellent des @keyframes inexistantes", [...nomsAnimes].filter((n) => /^[a-zA-Z_][\w-]*$/.test(n) && !motsCss.has(n) && !keyframes.has(n) && !/^(cubic|steps|var)/.test(n)));
+section(t("Animations qui appellent des @keyframes inexistantes", "Animations that call missing @keyframes"), [...nomsAnimes].filter((n) => /^[a-zA-Z_][\w-]*$/.test(n) && !motsCss.has(n) && !keyframes.has(n) && !/^(cubic|steps|var)/.test(n)));
 
 // 4. Doublons CSS
 const norm = (c) => c.split(";").map((d) => d.trim().replace(/\s+/g, " ")).filter(Boolean).sort().join(";");
@@ -146,15 +151,15 @@ for (const r of regles) {
   const ks = r.f + "|" + r.contexte + "|" + r.selecteur.replace(/\s+/g, " ");
   parSel.set(ks, (parSel.get(ks) || 0) + 1);
 }
-section("Mêmes déclarations sous plusieurs sélecteurs (à regrouper ou passer en variable)", [...parCorps.values()].filter((s) => s.length > 1).map((s) => s.join("  |  ")));
-section("Sélecteurs déclarés plusieurs fois au même niveau", [...parSel].filter(([, n]) => n > 1).map(([k, n]) => `${k.split("|")[2]}  (${n} fois${k.split("|")[1] ? ", dans " + k.split("|")[1] : ""}, ${path.basename(k.split("|")[0])})`));
+section(t("Mêmes déclarations sous plusieurs sélecteurs (à regrouper ou passer en variable)", "Same declarations under several selectors (to group, or to move into a variable)"), [...parCorps.values()].filter((s) => s.length > 1).map((s) => s.join("  |  ")));
+section(t("Sélecteurs déclarés plusieurs fois au même niveau", "Selectors declared several times at the same level"), [...parSel].filter(([, n]) => n > 1).map(([k, n]) => `${k.split("|")[2]}  (${n} ${t("fois", "times")}${k.split("|")[1] ? t(", dans ", ", in ") + k.split("|")[1] : ""}, ${path.basename(k.split("|")[0])})`));
 
 // 5. JavaScript : noms déclarés et jamais repris
 const toutJs = js.map((x) => x.t).join("\n");
 const declares = new Map();
-for (const { f, t } of js) {
-  for (const m of t.matchAll(/(?:^|[\s;{}(])(?:function\*?|class|const|let|var)\s+([A-Za-zÀ-ÿ_$][\w$À-ÿ]*)/g)) if (!declares.has(m[1])) declares.set(m[1], f);
-  for (const m of t.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) for (const n of m[1].split(",")) { const nom = n.split(":").pop().split("=")[0].trim(); if (nom && !declares.has(nom)) declares.set(nom, f); }
+for (const { f, t: code } of js) {
+  for (const m of code.matchAll(/(?:^|[\s;{}(])(?:function\*?|class|const|let|var)\s+([A-Za-zÀ-ÿ_$][\w$À-ÿ]*)/g)) if (!declares.has(m[1])) declares.set(m[1], f);
+  for (const m of code.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) for (const n of m[1].split(",")) { const nom = n.split(":").pop().split("=")[0].trim(); if (nom && !declares.has(nom)) declares.set(nom, f); }
 }
 // Un nom est inutilisé quand chacune de ses apparitions est une déclaration : cela reste vrai quand une même page
 // existe en plusieurs exemplaires (page générée, copie par famille), où un simple comptage le ferait passer pour utilisé
@@ -163,18 +168,18 @@ const inutilise = (nom) => {
   const e = echapper(nom);
   return compte(`(?<![\\w$À-ÿ])${e}(?![\\w$À-ÿ])`) === compte(`(?:function\\*?|class|const|let|var)\\s+${e}(?![\\w$À-ÿ])`);
 };
-section("Noms JavaScript déclarés et jamais utilisés ailleurs", [...declares].filter(([n]) => n.length > 1 && inutilise(n)).map(([n, f]) => `${n}  (${path.basename(f)})`));
+section(t("Noms JavaScript déclarés et jamais utilisés ailleurs", "JavaScript names declared and never used elsewhere"), [...declares].filter(([n]) => n.length > 1 && inutilise(n)).map(([n, f]) => `${n}  (${path.basename(f)})`));
 
 // 6. Fichiers orphelins
-if (!args.includes("--pas-de-fichiers")) {
+if (!args.includes("--pas-de-fichiers") && !args.includes("--no-files")) {
   const toutTexte = tous.filter((f) => TEXTE.has(ext(f))).map(lire).join("\n");
   const orphelins = tous.filter((f) => RESSOURCES.has(ext(f)) && !/(^|[\\/])(sw|service-worker|favicon)\.[a-z]+$/i.test(f)).filter((f) => {
     const nom = path.basename(f);
     return !toutTexte.includes(nom) && !toutTexte.includes(encodeURI(nom)) && !toutTexte.includes(nom.replace(ext(f), ""));
   });
-  section("Fichiers que rien ne référence", orphelins.map((f) => path.relative(process.cwd(), f)));
+  section(t("Fichiers que rien ne référence", "Files nothing references"), orphelins.map((f) => path.relative(process.cwd(), f)));
 }
 
-console.log(`Inventaire de ${tous.length} fichier(s) : ${regles.length} règles CSS, ${classes.size} classes, ${declares.size} noms JavaScript.`);
-console.log(sortie.length ? sortie.join("\n") : "\nRien de suspect trouvé.");
-console.log("\nRappel : ce sont des suspects. Confirmer chacun (recherche dans tout le projet, autres pages, outils tiers) avant de supprimer.");
+console.log(t(`Inventaire de ${tous.length} fichier(s) : ${regles.length} règles CSS, ${classes.size} classes, ${declares.size} noms JavaScript.`, `Inventory of ${tous.length} file(s): ${regles.length} CSS rules, ${classes.size} classes, ${declares.size} JavaScript names.`));
+console.log(sortie.length ? sortie.join("\n") : t("\nRien de suspect trouvé.", "\nNothing suspicious found."));
+console.log(t("\nRappel : ce sont des suspects. Confirmer chacun (recherche dans tout le projet, autres pages, outils tiers) avant de supprimer.", "\nReminder: these are suspects. Confirm each one (search the whole project, other pages, third-party tools) before deleting."));

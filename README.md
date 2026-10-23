@@ -1,259 +1,277 @@
-# /refacto : refactoriser avec Claude Code, preuve à l'appui
+# /proven-refactor: refactor with Claude Code, with proof
 
-`/refacto` est un skill pour Claude Code. Il range le code d'une page web, d'une petite application ou d'un script sans rien changer à ce que voit l'utilisateur, et il le prouve par une mesure.
+**English** · [Français](README.fr.md)
 
-Refactoriser consiste à réécrire du code pour le rendre plus simple à lire et à maintenir, sans modifier son comportement. Toute la difficulté est dans la fin de la phrase. Relire le code ou regarder la page ne suffit pas à garantir que rien n'a bougé : un élément décalé de quelques pixels, un menu qui ne s'ouvre plus sur téléphone ou une couleur qui disparaît en thème sombre passent facilement inaperçus. Ce skill remplace cette vérification à l'œil par une comparaison mesurée, avant et après chaque modification.
+`/proven-refactor` is a skill for Claude Code. It cleans up the code of a web page, a small application or a script without changing anything the user sees, and it proves it with a measurement. The same skill exists in French under the name `/refacto`.
 
-![Rapport visuel d'une comparaison : captures avant et après, et image des différences](docs/rapport-exemple.png)
+Refactoring means rewriting code so that it is easier to read and maintain, without changing its behaviour. The hard part is the end of that sentence. Re-reading the code or looking at the page is not enough to guarantee that nothing moved: an element shifted by a few pixels, a menu that no longer opens on a phone or a colour that disappears in dark mode easily go unnoticed. This skill replaces that visual check with a measured comparison, before and after every change.
 
-## Sommaire
+![Visual report of a comparison: screenshots before and after, and the diff image](docs/rapport-exemple.png)
 
-- [Le principe](#le-principe)
-- [Ce que la mesure compare](#ce-que-la-mesure-compare)
-- [Les états de la page](#les-états-de-la-page)
-- [Le rapport visuel](#le-rapport-visuel)
-- [Poids et vitesse](#poids-et-vitesse)
-- [Rangement, correction, décision](#rangement-correction-décision)
-- [Le déroulé complet](#le-déroulé-complet)
-- [Les outils fournis](#les-outils-fournis)
+*The screenshot above shows a report generated in French; with `--lang en`, the report is in English.*
+
+## Contents
+
+- [The principle](#the-principle)
+- [What the measurement compares](#what-the-measurement-compares)
+- [Page states](#page-states)
+- [The visual report](#the-visual-report)
+- [Weight and speed](#weight-and-speed)
+- [Cleanup, fix, decision](#cleanup-fix-decision)
+- [The full procedure](#the-full-procedure)
+- [Two short modes: light and instructions](#two-short-modes-light-and-instructions)
+- [The tools](#the-tools)
 - [Installation](#installation)
-- [Utilisation](#utilisation)
-- [Limites](#limites)
-- [Structure du dépôt](#structure-du-dépôt)
-- [Auteur](#auteur)
-- [English summary](#english-summary)
+- [Usage](#usage)
+- [Limitations](#limitations)
+- [Repository layout](#repository-layout)
+- [Author](#author)
 
-## Le principe
+## The principle
 
-Avant toute modification, le skill relève une **empreinte de référence** de la page. Il range ensuite le code par petits lots. Après chaque lot, il relève une nouvelle empreinte et la compare à la référence. Si un écart apparaît, le lot est annulé et refait plus petit.
+Before any change, the skill records a **reference fingerprint** of the page. It then cleans up the code in small batches. After each batch, it records a new fingerprint and compares it with the reference. If a difference appears, the batch is undone and redone smaller.
 
 ```mermaid
 flowchart TD
-    A["Empreinte de référence<br/>avant toute modification"] --> B["Inventaire<br/>code mort, doublons, valeurs répétées"]
-    B --> C["Rangement d'un petit lot"]
-    C --> D["Nouvelle empreinte<br/>comparée à la référence"]
-    D -->|Identique| E{"Reste-t-il<br/>des lots ?"}
-    D -->|Écart| F["Lot annulé,<br/>puis refait plus petit"]
+    A["Reference fingerprint<br/>before any change"] --> B["Inventory<br/>dead code, duplicates, repeated values"]
+    B --> C["Clean up a small batch"]
+    C --> D["New fingerprint<br/>compared with the reference"]
+    D -->|Identical| E{"Any batches<br/>left?"}
+    D -->|Difference| F["Batch undone,<br/>then redone smaller"]
     F --> C
-    E -->|Oui| C
-    E -->|Non| G["Nettoyage<br/>et comparaison finale"]
-    G --> H["Rapport visuel"]
+    E -->|Yes| C
+    E -->|No| G["Cleanup pass<br/>and final comparison"]
+    G --> H["Visual report"]
 ```
 
-La règle est simple : une refactorisation n'est terminée que lorsque l'empreinte finale est identique à la référence.
+A refactoring is only finished when the final fingerprint is identical to the reference.
 
-## Ce que la mesure compare
+## What the measurement compares
 
-L'empreinte est relevée dans un vrai navigateur (Chromium, piloté par Puppeteer), page par page.
+The fingerprint is recorded in a real browser (Chromium, driven by Puppeteer), page by page.
 
-| Élément comparé | Ce qui est relevé | Ce que cela détecte |
+| What is compared | What is recorded | What it catches |
 |---|---|---|
-| Structure de la page | Le DOM rendu, scripts exclus | Un élément ajouté, supprimé ou déplacé, même invisible |
-| Styles | Le style calculé de chaque élément visible (69 propriétés) et de ses pseudo-éléments `::before` et `::after`, ainsi que sa position et sa taille | Une marge, une couleur ou une police modifiée |
-| Accessibilité | L'arbre lu par les lecteurs d'écran : rôle, nom et état (déplié, coché, désactivé) de chaque élément | Un bouton renommé pour les lecteurs d'écran, un titre qui perd son niveau, un menu qui n'annonce plus s'il est ouvert |
-| Focus | L'élément qui a le focus clavier | Une navigation au clavier cassée |
-| Débordement | La largeur réelle de la page | Un défilement horizontal apparu sur téléphone |
-| Rendu | Une capture de la page, comparée pixel par pixel | Tout écart visible, avec le nombre de pixels touchés et la zone |
+| Page structure | The rendered DOM, scripts excluded | An element added, removed or moved, even an invisible one |
+| Styles | The computed style of every visible element (69 properties) and of its `::before` and `::after` pseudo-elements, plus its position and size | A changed margin, colour or font |
+| Accessibility | The tree screen readers read: role, name and state (expanded, checked, disabled) of every element | A button renamed for screen readers, a heading that loses its level, a menu that no longer says whether it is open |
+| Focus | The element that has keyboard focus | Broken keyboard navigation |
+| Overflow | The actual width of the page | Horizontal scrolling that appeared on phones |
+| Rendering | A screenshot of the page, compared pixel by pixel | Any visible difference, with the number of pixels affected and the area |
 
-Chaque relevé est répété dans toutes les combinaisons suivantes :
+Each recording is repeated in every combination below:
 
-| Largeur d'écran | Thème clair | Thème sombre |
+| Screen width | Light theme | Dark theme |
 |---|---|---|
-| 375 px (téléphone) | Mesuré | Mesuré |
-| 1440 px (ordinateur) | Mesuré | Mesuré |
+| 375 px (phone) | Measured | Measured |
+| 1440 px (desktop) | Measured | Measured |
 
-Soit quatre relevés pour chaque état de chaque page. Les largeurs se règlent avec l'option `--largeurs`. Le thème sombre n'est mesuré que si la page le prend en charge ; le skill le détecte seul.
+That makes four recordings for each state of each page. Widths are set with the `--widths` option. The dark theme is only measured if the page supports it; the skill detects this on its own.
 
-Pour que deux mesures successives soient comparables, les animations, les transitions et le curseur de saisie sont neutralisés, et le relevé attend le chargement complet des polices. La souris est ramenée dans un coin avant chaque relevé : un bouton resté sous le pointeur après un clic fausserait la capture suivante. Le skill mesure d'ailleurs la page deux fois avant toute modification : si ces deux mesures diffèrent, la page n'est pas stable et la source d'instabilité est traitée avant de commencer. Les très faibles variations de couleur, typiques d'une photo redimensionnée, sont signalées comme « bruit de rendu » sans compter comme un écart.
+So that two successive measurements can be compared, animations, transitions and the text cursor are frozen, and the recording waits for fonts to finish loading. The mouse is moved back to a corner before each recording: a button left under the pointer after a click would skew the next screenshot. The skill also measures the page twice before any change: if those two measurements differ, the page is not stable, and the source of instability is dealt with before starting. Very small colour variations, typical of a resized photo, are reported as "rendering noise" without counting as a difference.
 
-### Exemple : une marge modifiée
+### Example: a changed padding
 
-Sur une page de démonstration, la marge intérieure des cartes passe de 18 à 26 pixels. Extrait du résultat affiché :
+On a demo page, the inner padding of the cards goes from 18 to 26 pixels. Here is an excerpt of what the tool prints:
 
 ```
-ÉCART chargement @ 375-clair
-   - section#offres:2>article:1 { padding : 18px -> 26px }
-   - section#offres:2>article:1 { boite : 20 334 335 95 -> 20 334 335 111 }
-   - section#offres:2>article:1>h2:1 { boite : 39 353 297 27 -> 47 361 281 27 }
-   - capture : 10513 pixel(s) différent(s) nettement (plus de 40 sur 255), zone x 39-296, y 360-664
+DIFFERENCE load @ 375-light
+   - section#offers:1>article:1 { padding: 18px -> 26px }
+   - section#offers:1>article:1 { box: 20 80 335 140 -> 20 80 335 156 }
+   - section#offers:1>article:1>h2:1 { box: 39 119 297 28 -> 47 127 281 28 }
+   - screenshot: 5557 pixel(s) clearly different (more than 40 out of 255), area x 20-354, y 124-401
 ```
 
-L'écart est localisé (quel élément, quelle propriété, quelle valeur avant et après) et chiffré à l'écran. L'image en tête de cette page montre le rapport visuel de la même comparaison.
+The difference is located (which element, which property, which value before and after) and quantified on screen. The image at the top of this page shows the visual report of a comparison.
 
-## Les états de la page
+## Page states
 
-Une page ne se résume pas à son affichage au chargement : un menu ouvert, un onglet sélectionné ou un message d'erreur sont autant d'états qu'une modification peut casser. Le skill les trouve de deux façons.
+A page is more than what it shows on load: an open menu, a selected tab or an error message are all states a change can break. The skill finds them in two ways.
 
-- **L'exploration automatique** (option `--explorer`). L'outil ouvre seul, un par un, chaque bouton, onglet, menu déroulant et lien interne de la page, à partir d'une page rechargée à chaque fois, et capture l'état obtenu. Il ne clique jamais un bouton destructif (supprimer, effacer, réinitialiser, se déconnecter) ni un bouton d'envoi de formulaire, et il ne suit pas un lien qui mène à une autre page : il les liste dans son résultat. Pendant l'exploration, toute requête qui envoie des données (compteur, formulaire géré en JavaScript) est bloquée et signalée, et le stockage de la page est vidé entre deux éléments.
-- **Le scénario.** Les états qui demandent plusieurs actions, comme un formulaire rempli puis envoyé ou un parcours complet, sont décrits dans un court fichier, rejoué à l'identique avant et après. Un modèle est fourni (`exemple-etats.mjs`).
+- **Automatic exploration** (`--explore` option). The tool opens, one by one, every button, tab, dropdown and internal link of the page, starting each time from a reloaded page, and captures the resulting state. It never clicks a destructive button (delete, clear, reset, log out) or a form submit button, and it does not follow a link to another page: it lists them in its output. During exploration, any request that sends data (counter, form handled in JavaScript) is blocked and reported, and the page's storage is cleared between two elements.
+- **The scenario.** States that take several actions, such as a form filled in then submitted or a complete journey, are described in a short file, replayed identically before and after. A template is provided (`example-states.mjs`).
 
-Sur une application réelle, l'exploration a ouvert seule 18 états (onglets, feuilles, carrousels), et deux mesures successives sans modification sont ressorties identiques.
+On a real application, exploration opened 18 states on its own (tabs, sheets, carousels), and two successive measurements with no change came out identical.
 
-## Le rapport visuel
+## The visual report
 
-À chaque comparaison, le skill écrit une page HTML à côté de la référence. Pour chaque état en écart, elle montre la capture d'avant, celle d'après et une image des différences : les pixels modifiés en rouge sur la capture pâlie, la zone touchée entourée. Suivent le poids et la vitesse de la page, le bruit de rendu éventuel et la liste des états identiques.
+On every comparison, the skill writes an HTML page next to the reference. For each state with a difference, it shows the screenshot before, the one after and a diff image: changed pixels in red over the faded screenshot, the affected area circled. Then come the page's weight and speed, any rendering noise, and the list of identical states.
 
-Cette page est autonome (aucune ressource externe), lisible en thème clair comme en thème sombre, sur téléphone comme sur ordinateur. C'est la preuve à montrer à une personne qui ne lit pas le code : un client, un responsable, ou vous-même dans trois mois.
+The page is self-contained (no external resource), readable in light and dark themes, on phone and desktop. It is the proof to show someone who does not read code: a client, a manager or yourself three months from now.
 
-## Poids et vitesse
+## Weight and speed
 
-Au chargement de chaque page, le skill relève le nombre de requêtes, le poids brut et le poids compressé (recalculé en gzip), ainsi que les temps d'affichage. En comparaison, il donne la variation en pourcentage.
+When each page loads, the skill records the number of requests, the raw and compressed weight (recomputed with gzip) and display times. In comparison mode, it gives the change as a percentage.
 
-Ces chiffres ne comptent jamais comme un écart : ils servent à chiffrer ce qu'une refactorisation fait gagner, ou ce que coûterait une décision, par exemple l'ajout d'une feuille de styles commune à plusieurs pages. Les temps mesurés sur votre machine sont indicatifs.
+These numbers never count as a difference: they put a figure on what a refactoring saves, or on what a decision would cost, for example adding a stylesheet shared by several pages. Times measured on your machine are indicative.
 
-## Rangement, correction, décision
+## Cleanup, fix, decision
 
-Le skill classe chaque constat dans l'une de trois familles. Seule la première est traitée sans votre accord.
+The skill puts every finding into one of three families. Only the first is handled without your approval.
 
-| Famille | Définition | Exemples | Traitement |
+| Family | Definition | Examples | Handling |
 |---|---|---|---|
-| **Rangement** | Modifie le code sans rien changer pour l'utilisateur | Code mort, règles CSS en double, couleur répétée à passer en variable, textes écrits en dur à regrouper dans un fichier de données | Effectué, puis vérifié par l'empreinte |
-| **Correction** | Change quelque chose pour l'utilisateur | Bug, défaut d'accessibilité, débordement sur téléphone, couleur qui casse le thème sombre | Listé et soumis à votre validation, puis traité dans un lot séparé |
-| **Décision** | Choix inhabituel qui a peut-être une raison | Code qui semble dupliqué volontairement, ordre de chargement particulier | Justification recherchée dans la documentation du projet, puis question posée si elle est introuvable |
+| **Cleanup** | Changes the code without changing anything for the user | Dead code, duplicate CSS rules, repeated colour to turn into a variable, hard-coded text to gather in a data file | Done, then checked by the fingerprint |
+| **Fix** | Changes something for the user | Bug, accessibility defect, overflow on phones, colour that breaks the dark theme | Listed and submitted for your approval, then handled in a separate batch |
+| **Decision** | Unusual choice that may have a reason | Code that looks deliberately duplicated, a particular loading order | Justification looked for in the project's documentation, then a question asked if none is found |
 
-Cette séparation évite qu'une correction de bug se glisse dans un rangement et fausse la preuve.
+This separation keeps a bug fix from slipping into a cleanup and skewing the proof.
 
-## Le déroulé complet
+## The full procedure
 
-| Étape | Contenu |
+| Step | Content |
 |---|---|
-| 0. Situer le code | Lecture de la documentation du projet, distinction entre fichiers sources et fichiers générés, sauvegarde de l'état de départ |
-| 1. Poser le filet de sécurité | Vérification de la syntaxe, lancement des tests du projet s'il en a, relevé de l'empreinte de référence avec exploration automatique des états |
-| 2. Faire l'inventaire | Recherche automatique du code mort et des doublons, lecture du code avec une grille par langage, classement en rangement, correction ou décision |
-| 3. Ranger par lots | Du moins risqué au plus risqué : code mort, doublons, variables, données, découpage des fonctions, morceaux communs à plusieurs pages. Comparaison après chaque lot |
-| 4. Corrections validées | Uniquement celles que vous avez acceptées, dans un lot à part, vérifiées sur téléphone et sur ordinateur |
-| 5. Nettoyage | Suppression de ce que le rangement a rendu inutile et des fichiers de travail, puis comparaison finale |
-| 6. Rapport | Le rapport visuel de la comparaison finale, ce qui a été rangé, les chiffres (lignes, poids, états comparés), les écarts expliqués, les points en attente |
+| 0. Locate the code | Read the project's documentation, tell source files from generated files, back up the starting state |
+| 1. Set up the safety net | Check syntax, run the project's tests if it has any, record the reference fingerprint with automatic exploration of states |
+| 2. Take the inventory | Automatic search for dead code and duplicates, reading the code with a checklist per language, sorting into cleanup, fix or decision |
+| 3. Clean up in batches | From least to most risky: dead code, duplicates, variables, data, splitting functions, fragments shared by several pages. Comparison after each batch |
+| 4. Approved fixes | Only the ones you accepted, in a separate batch, checked on phone and desktop |
+| 5. Cleanup pass | Remove what the cleanup made useless and the working files, then a final comparison |
+| 6. Report | The visual report of the final comparison, what was cleaned up, the numbers (lines, weight, states compared), the explained differences, the pending items |
 
-Aucun commit, aucun envoi vers un dépôt distant et aucune mise en ligne n'a lieu sans votre accord explicite.
+No commit, no push to a remote repository and no deployment happens without your explicit approval.
 
-## Les outils fournis
+## Two short modes: light and instructions
 
-Le skill s'appuie sur cinq scripts Node, dans `skills/refacto/scripts/`. Ils fonctionnent aussi seuls, en ligne de commande.
+The full procedure is worth it for a whole page or application. For everything else, two shorter modes skip the fingerprint:
 
-| Script | Rôle | Commande type |
+| Mode | Command | When | What it checks |
+|---|---|---|---|
+| **Light** | `/proven-refactor light [files]` | Right after a change, so that it leaves nothing behind | Only the touched files: syntax, code made dead, duplicates created, leftover working files, comments describing the previous state, a 375 px check for a page |
+| **Instructions** | `/proven-refactor instructions [file]` | After editing a skill, a CLAUDE.md, a settings file or a hook | Each rule written in one place only, no contradiction with an older rule, no path to a file that no longer exists, length of what is loaded with every message |
+
+The instructions mode targets an often overlooked cost: a CLAUDE.md or a skill description is re-read with every message, and every extra line is paid for every time.
+
+## The tools
+
+The skill relies on five Node scripts, in `plugins/proven-refactor/skills/proven-refactor/scripts/`. They also work on their own, from the command line. They were written in French and speak both languages: `--lang en` (or the `REFACTO_LANG=en` environment variable) switches messages and the report to English, and every option has an English name. The French option names keep working.
+
+| Script | Role | Typical command |
 |---|---|---|
-| `empreinte.mjs` | Relève et compare l'empreinte d'une page, d'une application ou d'un site entier, explore ses états, mesure son poids et écrit le rapport visuel | `node empreinte.mjs page.html reference.json --explorer` |
-| `sorties.mjs` | Pour un script (construction de site, export) : compare le code de sortie, le texte affiché et les fichiers produits, à l'octet près | `node sorties.mjs reference.json --commande "node build.mjs" --produit dist` |
-| `verifier-syntaxe.mjs` | Vérifie la syntaxe des fichiers JavaScript, des scripts écrits dans les pages HTML, des blocs JSON-LD, des fichiers JSON et Python | `node verifier-syntaxe.mjs mon-projet/` |
-| `code-mort.mjs` | Liste les suspects : classes CSS jamais utilisées, variables et animations inutilisées, déclarations en double, fonctions jamais appelées, fichiers orphelins | `node code-mort.mjs mon-projet/ --exclure dist` |
-| `auto-test.mjs` | Vérifie que les quatre outils précédents fonctionnent sur votre machine (49 contrôles sur un site de test) | `node auto-test.mjs` |
+| `empreinte.mjs` (fingerprint) | Records and compares the fingerprint of a page, an application or a whole site, explores its states, measures its weight and writes the visual report | `node empreinte.mjs page.html reference.json --explore --lang en` |
+| `sorties.mjs` (outputs) | For a script (site build, export): compares the exit code, the printed text and the files produced, byte for byte | `node sorties.mjs reference.json --command "node build.mjs" --output dist --lang en` |
+| `verifier-syntaxe.mjs` (check syntax) | Checks the syntax of JavaScript files, scripts written inside HTML pages, JSON-LD blocks, JSON and Python files | `node verifier-syntaxe.mjs my-project/ --lang en` |
+| `code-mort.mjs` (dead code) | Lists suspects: CSS classes never used, unused variables and animations, duplicate declarations, functions never called, orphan files | `node code-mort.mjs my-project/ --exclude dist --lang en` |
+| `auto-test.mjs` (self-test) | Checks that the four tools above work on your machine (78 checks on a test site, in both languages) | `node auto-test.mjs --lang en` |
 
-`empreinte.mjs` et `sorties.mjs` suivent la même logique : au premier lancement, la référence est enregistrée ; aux lancements suivants, la mesure est comparée à cette référence. Le code de sortie vaut 0 si tout est identique et 1 sinon, ce qui permet de les utiliser dans une chaîne d'intégration continue.
+`empreinte.mjs` and `sorties.mjs` follow the same logic: on the first run, the reference is recorded; on later runs, the measurement is compared with that reference. The exit code is 0 if everything is identical and 1 otherwise, so they can be used in a continuous integration pipeline. A reference recorded in French compares with a run in English, and the other way round.
 
-Principales options d'`empreinte.mjs` :
+Main options of `empreinte.mjs`:
 
-| Option | Effet |
+| Option | Effect |
 |---|---|
-| `--etats scenario.mjs` | Rejoue un scénario d'états (formulaire rempli, parcours) |
-| `--explorer` | Ouvre seul chaque bouton, onglet, menu déroulant et lien interne |
-| `--max-etats 25` | Limite le nombre d'éléments ouverts par l'exploration |
-| `--toutes-pages` | Mesure toutes les pages HTML d'un dossier, trouvées seules |
-| `--exclure dist` | Écarte des chemins, par exemple les fichiers générés |
-| `--largeurs 375,1440` | Choisit les largeurs d'écran |
-| `--themes clair,sombre` | Choisit les thèmes, au lieu de la détection automatique |
-| `--sans-captures` | Compare sans captures, plus rapidement ; le rapport visuel est alors sans images |
-| `--seuil-pixel 40` | Écart de couleur, sur 255, à partir duquel un pixel compte comme modifié |
-| `--contourner-csp` | Lève la règle de sécurité de la page (Content-Security-Policy) dans le navigateur de test, quand elle empêche de neutraliser les animations. L'outil signale de lui-même quand l'option est nécessaire (voir les limites) |
+| `--states scenario.mjs` | Replays a states scenario (filled form, journey) |
+| `--explore` | Opens every button, tab, dropdown and internal link on its own |
+| `--max-states 25` | Limits the number of elements opened by exploration |
+| `--all-pages` | Measures every HTML page of a folder, found on its own |
+| `--exclude dist` | Leaves out paths, for example generated files |
+| `--widths 375,1440` | Sets the screen widths |
+| `--themes light,dark` | Sets the themes, instead of automatic detection |
+| `--no-screenshots` | Compares without screenshots, faster; the visual report then has no images |
+| `--pixel-threshold 40` | Colour difference, out of 255, above which a pixel counts as changed |
+| `--bypass-csp` | Lifts the page's security policy (Content-Security-Policy) in the test browser, when it prevents freezing animations. The tool says on its own when the option is needed (see limitations) |
 
-Le skill comprend aussi une grille de lecture par langage (`references/catalogue.md`) : HTML, CSS, JavaScript, scripts Node et Python, nœuds Code de n8n. Pour chaque situation, elle indique quoi faire, dans quelle famille la classer, et le piège à éviter.
+The skill also includes a reading checklist per language (`references/catalog.md`): HTML, CSS, JavaScript, Node and Python scripts, n8n Code nodes. For each situation, it says what to do, which family it belongs to and the trap to avoid.
 
 ## Installation
 
-### Prérequis
+### Requirements
 
 - [Claude Code](https://claude.com/claude-code)
-- Node.js 18 ou plus récent
-- Puppeteer, pour les relevés dans le navigateur :
+- Node.js 18 or later
+- Puppeteer, for recordings in the browser:
 
 ```
 npm install -g puppeteer
 ```
 
-### Par le gestionnaire de plugins de Claude Code
+### With the Claude Code plugin manager
 
 ```
 /plugin marketplace add lilian-barty/skill-refacto
-/plugin install refacto@lilian-barty-refacto
+/plugin install proven-refactor@lilian-barty-refacto
 ```
 
-Redémarrez ensuite Claude Code.
+Then restart Claude Code. The French version installs with `refacto@lilian-barty-refacto`; there is no need to install both.
 
-### Installation manuelle
+If you installed a version earlier than 1.4.0, update the marketplace first: `/plugin marketplace update lilian-barty-refacto`.
 
-Copiez le dossier `skills/refacto` dans `~/.claude/skills/`.
+### Manual installation
 
-### Vérification
+Copy the `plugins/proven-refactor/skills/proven-refactor` folder into `~/.claude/skills/`.
 
-```
-node ~/.claude/skills/refacto/scripts/auto-test.mjs
-```
-
-Le résultat attendu est « 49 contrôles, 0 échec(s) ». Après une installation par plugin, le script se trouve dans `~/.claude/plugins/cache/lilian-barty-refacto/refacto/<version>/skills/refacto/scripts/`.
-
-## Utilisation
-
-Dans Claude Code :
+### Check
 
 ```
-/refacto ma-page.html
-/refacto mon-site/
+node ~/.claude/skills/proven-refactor/scripts/auto-test.mjs --lang en
 ```
 
-Une demande formulée librement fonctionne aussi : « refactorise ce script », « nettoie le code de cette page ».
+The expected result is "78 checks, 0 failure(s)". After a plugin installation, the script is in `~/.claude/plugins/cache/lilian-barty-refacto/proven-refactor/<version>/skills/proven-refactor/scripts/`.
 
-Au lancement, le skill affiche un court mode d'emploi, puis déroule les étapes décrites plus haut. Il vous sollicite dans trois cas seulement : une correction ou une décision à valider, des tests déjà en échec avant de commencer, et l'accord final avant tout commit ou mise en ligne. À la fin, il vous indique où trouver le rapport visuel.
+## Usage
 
-Le skill couvre les pages HTML, les sites statiques, les petites applications web en JavaScript, les scripts Node et Python, ainsi que le code des nœuds Code de n8n.
+In Claude Code:
 
-## Limites
+```
+/proven-refactor my-page.html
+/proven-refactor my-site/
+```
 
-- Le skill garantit que le code rangé se comporte exactement comme avant. Il ne rend pas le code meilleur sur le fond : un bug présent au départ est toujours là à la fin, mais il vous est signalé.
-- Il ne modifie pas le design. L'objectif est précisément que rien ne change à l'écran.
-- La preuve couvre les états ouverts par l'exploration automatique et ceux décrits dans le scénario. Un état qui demande plusieurs actions et qui ne figure pas dans le scénario n'est pas protégé.
-- Sur un site de plusieurs dizaines de pages, l'exploration rallonge nettement la mesure : la limiter avec `--max-etats` et `--largeurs`, ou la réserver aux pages interactives.
-- Les éléments animés en continu (bandeau qui défile, compteur) peuvent laisser des écarts de moins de 3 pixels. Ils sont signalés comme tels dans le rapport.
-- Une page protégée par une règle de sécurité stricte (Content-Security-Policy) se mesure avec l'option `--contourner-csp`, qui lève cette règle dans le navigateur de test. Un changement que la règle bloquerait en ligne, comme un style ou un script écrit dans la page, échappe alors à la mesure : il se vérifie dans le code modifié et par les tests du projet.
-- Le contenu d'un Shadow DOM ou d'une iframe n'est comparé qu'aux pixels, pas élément par élément.
-- Sur une application construite par un outil (React, Vue, TypeScript), la mesure porte sur le site construit. Les fichiers .ts, .tsx, .jsx ou .vue ne sont pas vérifiés par `verifier-syntaxe.mjs`, qui le signale : leur contrôle revient à la construction du projet.
-- Une référence enregistrée par une version antérieure reste utilisable, mais l'outil indique ce qu'elle ne couvre pas ; il vaut mieux l'enregistrer à nouveau.
-- Les temps d'affichage mesurés sur votre machine sont indicatifs et ne remplacent pas une mesure en conditions réelles.
-- Le skill fonctionne dans Claude Code, sur votre machine. Il ne fonctionne pas dans l'application Claude sur le web, qui ne dispose ni de Node ni d'un navigateur piloté.
-- Le skill est rédigé en français.
+A request in plain words works too: "refactor this script", "clean up the code of this page".
 
-## Structure du dépôt
+At launch, the skill shows a short guide, then goes through the steps described above. It asks for your input in three cases only: a fix or a decision to approve, tests already failing before it starts and the final go-ahead before any commit or deployment. At the end, it tells you where to find the visual report.
+
+The skill covers HTML pages, static sites, small JavaScript web applications, Node and Python scripts, and the code of n8n Code nodes.
+
+## Limitations
+
+- The skill guarantees that the cleaned-up code behaves exactly as before. It does not make the code better in substance: a bug present at the start is still there at the end, but it is reported to you.
+- It does not change the design. The whole point is that nothing changes on screen.
+- The proof covers the states opened by automatic exploration and those described in the scenario. A state that takes several actions and is not in the scenario is not protected.
+- On a site with several dozen pages, exploration makes the measurement much longer: limit it with `--max-states` and `--widths`, or keep it for interactive pages.
+- Continuously animated elements (scrolling banner, counter) can leave differences under 3 pixels. They are reported as such in the report.
+- Animations driven by scrolling (`animation-timeline`) are not covered: the fingerprint measures with animations frozen. They need separate proof, described in the skill.
+- A page protected by a strict security policy (Content-Security-Policy) is measured with the `--bypass-csp` option, which lifts that policy in the test browser. A change the policy would block in production, such as a style or script written into the page, then escapes the measurement: it is checked in the modified code and by the project's tests.
+- The content of a Shadow DOM or an iframe is only compared through pixels, not element by element.
+- On an application built by a tool (React, Vue, TypeScript), the measurement covers the built site. `.ts`, `.tsx`, `.jsx` or `.vue` files are not checked by `verifier-syntaxe.mjs`, which says so: checking them is the job of the project's build.
+- A reference recorded by an earlier version remains usable, but the tool states what it does not cover; it is better to record it again.
+- Display times measured on your machine are indicative and do not replace a measurement under real conditions.
+- The skill works in Claude Code, on your machine. It does not work in the Claude web app, which has neither Node nor a driven browser.
+- Script names, internal comments and the names of the report files remain in French; everything the tools print and the report itself follow `--lang`.
+
+## Repository layout
 
 ```
 skill-refacto/
-├── .claude-plugin/          manifestes du plugin et de la marketplace
+├── .claude-plugin/
+│   └── marketplace.json         the marketplace and its two plugins
+├── plugins/
+│   ├── proven-refactor/         English plugin
+│   │   ├── .claude-plugin/      plugin manifest
+│   │   └── skills/proven-refactor/
+│   │       ├── SKILL.md         instructions Claude follows
+│   │       ├── references/
+│   │       │   └── catalog.md   reading checklist per language
+│   │       └── scripts/         the five tools and two states scenario templates
+│   └── refacto/                 French plugin, same layout, same scripts
+├── outils/
+│   └── synchroniser-scripts.mjs copies the French plugin's scripts into the English one
 ├── docs/
-│   └── rapport-exemple.png  capture d'un rapport visuel
-├── skills/refacto/
-│   ├── SKILL.md             instructions suivies par Claude
-│   ├── references/
-│   │   └── catalogue.md     grille de lecture par langage
-│   └── scripts/             les cinq outils et un modèle de scénario d'états
+│   └── rapport-exemple.png      screenshot of a visual report
 ├── CHANGELOG.md
 ├── LICENSE
-└── README.md
+├── README.md                    this page
+└── README.fr.md                 French version
 ```
 
-## Auteur
+## Author
 
-Lilian Barty-Christophe, consultant freelance en IA à Paris. J'installe des outils IA chez des indépendants et dans des entreprises, puis je forme les équipes qui s'en servent.
+Lilian Barty-Christophe, freelance AI consultant in Paris. I set up AI tools for independent professionals and companies, then train the teams who use them.
 
-Ce skill vient de mes propres projets. Sur mon site, une modification de code avait fait disparaître le bouton de changement de thème de 21 pages, alors que la page d'accueil, seule page épargnée, semblait parfaitement en ordre. La méthode décrite ici a depuis servi à refondre le code du site, puis celui d'une application web, vérifiée sur 86 écrans, tous identiques avant et après.
+This skill comes from my own projects. On my website, a code change had removed the theme toggle from 21 pages, while the home page, the only one spared, looked perfectly fine. The method described here has since been used to rework the site's code, then that of a web application, checked on 86 screens, all identical before and after.
 
-Site : [lilian-barty.fr](https://www.lilian-barty.fr/)
+Website: [lilian-barty.fr](https://www.lilian-barty.fr/)
 
-## English summary
-
-`/refacto` is a Claude Code skill for cleaning up the code of web pages, small apps and scripts without breaking them.
-
-Before touching anything, it takes a snapshot of the page: the DOM, the computed style of each element, the accessibility tree, the focused element and a screenshot. It does this at 375 and 1440 px, in light and dark mode, and in every state of the page: it opens each button, tab and menu by itself, and replays a short script for multi-step states. After each small batch of changes, it takes the snapshot again and compares, pixel by pixel. If it finds a bug on the way, it tells you and leaves it alone.
-
-Each comparison writes a visual report (before, after, and the differences circled in red) and the page weight. It also comes with a dead-code finder and a self-test. The skill is in French. MIT license.
-
-## Licence
+## License
 
 [MIT](LICENSE)
